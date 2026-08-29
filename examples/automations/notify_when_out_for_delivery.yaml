@@ -1,0 +1,24 @@
+# Notify when a La Poste parcel goes out for delivery.
+
+alias: "La Poste: out for delivery"
+description: Notify when a tracked La Poste parcel is loaded for delivery today.
+mode: queued
+max: 10
+
+triggers:
+  - trigger: event
+    event_type: laposte_parcel_status_changed
+
+conditions:
+  - condition: template
+    value_template: "{{ trigger.event.data.new_status == 'out_for_delivery' }}"
+
+actions:
+  - action: notify.mobile_app
+    data:
+      title: "La Poste on the way"
+      message: >-
+        {{ trigger.event.data.sender or trigger.event.data.barcode }}
+        is being delivered today.
+      data:
+        clickAction: "{{ trigger.event.data.url }}"
