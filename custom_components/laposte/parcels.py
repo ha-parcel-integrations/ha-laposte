@@ -149,19 +149,6 @@ def _warn_is_parcel_back() -> None:
     )
 
 
-def _warn_merchant_name_present() -> None:
-    """Warn once (presence only, never the value) that merchantName is populated.
-
-    Its shape/reliability as a sender field is unconfirmed.
-    """
-    _warn_once(
-        "merchant-name-present",
-        "La Poste populated contextData.merchantName for the first time — "
-        "open an issue (no need to attach the value): %s",
-        NEW_ISSUE_URL,
-    )
-
-
 def _status_map(product: str | None) -> dict[str, ParcelStatus]:
     if product == "colissimo":
         return _COLISSIMO_MAP
@@ -380,9 +367,9 @@ def normalize_parcel(raw: dict, *, include_history: bool = False) -> dict:
         _warn_unexpected_estim_date(product, is_final)
     if context.get("isParcelBack"):
         _warn_is_parcel_back()
+    # Confirmed live: contextData.merchantName carries the sending merchant's
+    # name (e.g. an online retailer) when the shipper set one.
     merchant_name = context.get("merchantName")
-    if merchant_name:
-        _warn_merchant_name_present()
 
     return {
         "carrier": carrier_from_product(product),

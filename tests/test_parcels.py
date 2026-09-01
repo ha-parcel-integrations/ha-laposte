@@ -377,17 +377,15 @@ def test_is_parcel_back_warns_once(caplog):
     assert caplog.text.count("isParcelBack") == 1
 
 
-def test_merchant_name_present_warns_once(caplog):
+def test_merchant_name_populates_sender_without_warning(caplog):
     raw = {
         "inputIdShip": "EW000000000FR", "product": "colissimo",
         "currentState": {"code": "ACHNAT"}, "contextData": {"merchantName": "A Real Shop"},
         "event": [{"date": "2026-08-06T10:00:00+02:00", "group": "ACHNAT", "code": "ET1"}],
     }
     parcel = normalize_parcel(raw)
-    normalize_parcel(raw)
     assert parcel["sender"] == "A Real Shop"
-    assert caplog.text.count("merchantName for the first time") == 1
-    assert "A Real Shop" not in caplog.text  # presence only, never the value
+    assert "merchantName" not in caplog.text  # confirmed live, no longer a one-shot warning
 
 
 def test_chronopost_return_is_sticky_and_barcode_keeps_input_code():
