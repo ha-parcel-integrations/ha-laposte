@@ -39,8 +39,8 @@ def _entry_with(parcels: list[dict]) -> MockConfigEntry:
 
 def _in_transit(code: str = ACTIVE_CODE) -> dict:
     sample = active_sample(code)
-    sample["statusCode"] = "IN_TRANSIT"
-    sample["statusText"] = "In transit"
+    sample["currentState"] = {"code": "ET1", "shortLabel": "In transit"}
+    sample["event"] = sample["event"][1:]
     return sample
 
 
@@ -138,7 +138,8 @@ async def test_update_backfills_missing_tracking_number(hass):
     entry = _entry_with([{CONF_TRACKING_CODE: OTHER_CODE}])
     entry.add_to_hass(hass)
     sample = active_sample()
-    del sample["trackingNumber"]
+    del sample["inputIdShip"]
+    del sample["idShip"]
     client = AsyncMock()
     client.async_get_parcel.return_value = sample
     coordinator = LaPosteCoordinator(hass, client, entry)
@@ -153,7 +154,7 @@ async def test_update_prunes_cache_for_untracked_parcels(hass):
     client = AsyncMock()
     client.async_get_parcel.return_value = delivered_sample()
     coordinator = LaPosteCoordinator(hass, client, entry)
-    coordinator._raw_cache["GONE"] = {"trackingNumber": "GONE"}
+    coordinator._raw_cache["GONE"] = {"inputIdShip": "GONE"}
 
     await coordinator._async_update_data()
 
@@ -369,7 +370,8 @@ async def test_fires_registered_event_for_new_parcel(hass):
     assert events[0].data["barcode"] == OTHER_CODE
 
 
-async def test_fires_delivery_time_changed_event(hass):
+async def test_delivery_time_changed_never_fires(hass):
+    """La Poste exposes no delivery window, so the ETA event has nothing to say."""
     entry = _entry_with([{CONF_TRACKING_CODE: ACTIVE_CODE}])
     entry.add_to_hass(hass)
     client = AsyncMock()
@@ -380,41 +382,9 @@ async def test_fires_delivery_time_changed_event(hass):
         f"{DOMAIN}_parcel_delivery_time_changed", lambda e: events.append(e)
     )
 
-    client.async_get_parcel.return_value = active_sample()
-    await coordinator._async_update_data()  # first refresh: suppressed
-
-    moved = active_sample()
-    moved["estimatedDelivery"] = {
-        "from": "2026-04-29T16:00:00Z",
-        "to": "2026-04-29T18:00:00Z",
-    }
-    client.async_get_parcel.return_value = moved
+    client.async_get_parcel.return_value = _in_transit()
     await coordinator._async_update_data()
-    await hass.async_block_till_done()
-
-    assert len(events) == 1
-    assert events[0].data["old_planned_from"] == "2026-04-29T13:00:00Z"
-    assert events[0].data["new_planned_from"] == "2026-04-29T16:00:00Z"
-
-
-async def test_losing_the_eta_is_silent(hass):
-    """value -> null just means the carrier lost the window; not worth an alert."""
-    entry = _entry_with([{CONF_TRACKING_CODE: ACTIVE_CODE}])
-    entry.add_to_hass(hass)
-    client = AsyncMock()
-    coordinator = LaPosteCoordinator(hass, client, entry)
-
-    events = []
-    hass.bus.async_listen(
-        f"{DOMAIN}_parcel_delivery_time_changed", lambda e: events.append(e)
-    )
-
     client.async_get_parcel.return_value = active_sample()
-    await coordinator._async_update_data()
-
-    dropped = active_sample()
-    dropped["estimatedDelivery"] = {"from": None, "to": None}
-    client.async_get_parcel.return_value = dropped
     await coordinator._async_update_data()
     await hass.async_block_till_done()
 

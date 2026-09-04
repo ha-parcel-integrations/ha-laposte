@@ -37,19 +37,27 @@ from .payloads import active_sample, delivered_sample, event, pickup_sample
 
 
 @pytest.mark.parametrize(
-    "code,expected",
+    "code,product,expected",
     [
-        ("REGISTERED", ParcelStatus.REGISTERED),
-        ("IN_TRANSIT", ParcelStatus.IN_TRANSIT),
-        ("OUT_FOR_DELIVERY", ParcelStatus.OUT_FOR_DELIVERY),
-        ("AT_PICKUP_POINT", ParcelStatus.AT_PICKUP_POINT),
-        ("DELIVERED", ParcelStatus.DELIVERED),
-        ("RETURN_TO_SENDER", ParcelStatus.RETURNING),
-        ("EXCEPTION", ParcelStatus.PROBLEM),
+        ("EXPANN", "colissimo", ParcelStatus.REGISTERED),
+        ("ACHNAT", "colissimo", ParcelStatus.IN_TRANSIT),
+        ("AARAREF", "colissimo", ParcelStatus.PROBLEM),
+        ("DESLIVD", "colissimo", ParcelStatus.DELIVERED),
+        ("ET1", "chronopost", ParcelStatus.IN_TRANSIT),
+        ("MD1", "chronopost", ParcelStatus.OUT_FOR_DELIVERY),
+        ("AG1", "chronopost", ParcelStatus.AT_PICKUP_POINT),
+        ("RE1", "chronopost", ParcelStatus.RETURNING),
+        ("DI1", "chronopost", ParcelStatus.DELIVERED),
     ],
 )
-def test_map_parcel_status_known(code, expected):
-    assert map_parcel_status(code) == expected
+def test_map_parcel_status_known(code, product, expected):
+    assert map_parcel_status(code, product) == expected
+
+
+def test_map_parcel_status_unknown_product_has_no_vocabulary(caplog):
+    """A product we have never seen guesses nothing; it asks for a report."""
+    assert map_parcel_status("DI1", "colipays") == ParcelStatus.UNKNOWN
+    assert "issues/new" in caplog.text
 
 
 def test_map_parcel_status_missing_is_unknown():
@@ -58,7 +66,7 @@ def test_map_parcel_status_missing_is_unknown():
 
 
 def test_map_parcel_status_unmapped_is_unknown():
-    assert map_parcel_status("TELEPORTED") == ParcelStatus.UNKNOWN
+    assert map_parcel_status("TELEPORTED", "colissimo") == ParcelStatus.UNKNOWN
 
 
 def test_map_event_status_missing_and_unmapped_are_none():
@@ -66,12 +74,12 @@ def test_map_event_status_missing_and_unmapped_are_none():
     "no mapping" from "mapped to unknown"."""
     assert map_event_status(None) is None
     assert map_event_status("SOMETHING_NEW") is None
-    assert map_event_status("DELIVERED") == ParcelStatus.DELIVERED
+    assert map_event_status("DI1", "chronopost") == ParcelStatus.DELIVERED
 
 
 def test_unmapped_status_warns_only_once(caplog):
-    assert map_parcel_status("ABDUCTED") == ParcelStatus.UNKNOWN
-    assert map_parcel_status("ABDUCTED") == ParcelStatus.UNKNOWN
+    assert map_parcel_status("ABDUCTED", "colissimo") == ParcelStatus.UNKNOWN
+    assert map_parcel_status("ABDUCTED", "colissimo") == ParcelStatus.UNKNOWN
     assert caplog.text.count("ABDUCTED") == 1
     assert "issues/new" in caplog.text
 
@@ -112,16 +120,16 @@ def test_format_dimensions_needs_all_three_axes():
 
 
 def test_build_history_orders_oldest_to_newest():
-    history = build_history(delivered_sample()["events"])
+    history = build_history(delivered_sample()["event"], product="chronopost")
     assert len(history) == 4
     assert history[0]["raw_status"] == "Shipment announced"
-    assert history[0]["status"] == ParcelStatus.REGISTERED
+    assert history[0]["status"] == ParcelStatus.IN_TRANSIT
     assert history[-1]["status"] == ParcelStatus.DELIVERED
 
 
 def test_build_history_caps_to_max_events():
     events = [
-        event("IN_TRANSIT", f"2026-04-{day:02d}T10:00:00Z", "moved")
+        event("ET1", f"2026-04-{day:02d}T10:00:00Z", "moved")
         for day in range(1, 26)
     ]
     assert len(build_history(events, max_events=20)) == 20
@@ -129,23 +137,23 @@ def test_build_history_caps_to_max_events():
 
 def test_build_history_handles_missing_and_malformed():
     assert build_history(None) == []
-    assert build_history([{"statusCode": "IN_TRANSIT"}]) == []  # no timestamp
+    assert build_history([{"code": "ET1"}]) == []  # no timestamp
     assert build_history(["not-a-dict"]) == []
 
 
 def test_build_history_keeps_unparseable_timestamp_last():
     history = build_history(
         [
-            event("REGISTERED", "2026-04-24T10:00:00Z", "fine"),
-            event("IN_TRANSIT", "not-a-date", "odd"),
+            event("PC1", "2026-04-24T10:00:00Z", "fine"),
+            event("ET1", "not-a-date", "odd"),
         ]
     )
     assert [entry["raw_status"] for entry in history] == ["fine", "odd"]
 
 
 def test_build_history_falls_back_to_status_code_without_text():
-    history = build_history([event("IN_TRANSIT", "2026-04-24T10:00:00Z", "")])
-    assert history[0]["raw_status"] == "IN_TRANSIT"
+    history = build_history([event("ET1", "2026-04-24T10:00:00Z", "")])
+    assert history[0]["raw_status"] == "ET1"
 
 
 # ---------------------------------------------------------------------------
@@ -210,10 +218,10 @@ def test_capabilities_match_what_normalize_parcel_actually_returns():
 
 def test_normalize_delivered_parcel():
     parcel = normalize_parcel(delivered_sample())
-    assert parcel["carrier"] == "La Poste"
+    assert parcel["carrier"] == "Chronopost"
     assert parcel["barcode"] == "EXAMPLE123456"
     assert parcel["sender"] == "Example Shop"
-    assert parcel["receiver"] == "Jane Doe"
+    assert parcel["receiver"] is None
     assert parcel["status"] == ParcelStatus.DELIVERED
     assert parcel["raw_status"] == "Delivered to the recipient"
     assert parcel["delivered"] is True
@@ -223,30 +231,23 @@ def test_normalize_delivered_parcel():
     assert parcel["planned_from"] is None
     assert parcel["planned_to"] is None
     assert parcel["url"] == "https://www.laposte.fr/outils/suivre-vos-envois?code=EXAMPLE123456"
-    assert parcel["weight"] == 1.25
-    assert parcel["dimensions"]["text"] == "30 x 20 x 10 cm"
+    assert parcel["weight"] is None
+    assert parcel["dimensions"] is None
     assert parcel["history"] is None  # opt-in, default off
 
 
 def test_normalize_history_is_opt_in():
     parcel = normalize_parcel(delivered_sample(), include_history=True)
     assert len(parcel["history"]) == 4
-    assert parcel["history"][0]["status"] == ParcelStatus.REGISTERED
+    assert parcel["history"][0]["status"] == ParcelStatus.IN_TRANSIT
 
 
-def test_normalize_active_parcel_has_window():
+def test_normalize_active_parcel_exposes_no_window():
+    """La Poste publishes no usable ETA; the keys exist but stay empty."""
     parcel = normalize_parcel(active_sample())
     assert parcel["status"] == ParcelStatus.OUT_FOR_DELIVERY
     assert parcel["delivered"] is False
-    assert parcel["planned_from"] == "2026-04-29T13:00:00Z"
-    assert parcel["planned_to"] == "2026-04-29T15:00:00Z"
-
-
-def test_normalize_collapses_point_estimate_to_no_window_end():
-    raw = active_sample()
-    raw["estimatedDelivery"]["to"] = raw["estimatedDelivery"]["from"]
-    parcel = normalize_parcel(raw)
-    assert parcel["planned_from"] == "2026-04-29T13:00:00Z"
+    assert parcel["planned_from"] is None
     assert parcel["planned_to"] is None
 
 
@@ -254,12 +255,12 @@ def test_normalize_pickup_parcel():
     parcel = normalize_parcel(pickup_sample())
     assert parcel["status"] == ParcelStatus.AT_PICKUP_POINT
     assert parcel["pickup"] is True
-    assert parcel["pickup_point"] == "Example Point Central Station"
+    assert parcel["pickup_point"] is None
 
 
 def test_normalize_pending_placeholder():
     """A tracked-but-not-yet-scanned code still yields a full parcel dict."""
-    parcel = normalize_parcel({"trackingNumber": "EXAMPLE000001"})
+    parcel = normalize_parcel({"inputIdShip": "EXAMPLE000001"})
     assert parcel["status"] == ParcelStatus.UNKNOWN
     assert parcel["delivered"] is False
     assert parcel["raw_status"] is None
@@ -270,8 +271,7 @@ def test_normalize_pending_placeholder():
 
 def test_normalize_blank_fields_become_none():
     raw = active_sample()
-    raw["sender"] = ""
-    raw["recipient"] = ""
+    raw["contextData"] = {"merchantName": ""}
     parcel = normalize_parcel(raw)
     assert parcel["sender"] is None
     assert parcel["receiver"] is None
@@ -284,8 +284,9 @@ def test_normalize_keeps_raw_payload():
 
 def test_normalize_falls_back_to_status_code_without_text():
     raw = active_sample()
-    raw["statusText"] = None
-    assert normalize_parcel(raw)["raw_status"] == "OUT_FOR_DELIVERY"
+    raw["currentState"] = {"code": "MD1"}
+    raw["event"] = [{"code": "MD1", "date": "2026-04-29T08:46:00Z"}]
+    assert normalize_parcel(raw)["raw_status"] == "MD1"
 
 
 def test_colissimo_uses_current_state_not_newest_event():

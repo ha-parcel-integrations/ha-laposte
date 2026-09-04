@@ -60,14 +60,6 @@ _CHRONOPOST_MAP: dict[str, ParcelStatus] = {
     "AG1": ParcelStatus.AT_PICKUP_POINT, "RE1": ParcelStatus.RETURNING,
     "DI1": ParcelStatus.DELIVERED,
 }
-_LEGACY_MAP: dict[str, ParcelStatus] = {
-    "REGISTERED": ParcelStatus.REGISTERED, "IN_TRANSIT": ParcelStatus.IN_TRANSIT,
-    "OUT_FOR_DELIVERY": ParcelStatus.OUT_FOR_DELIVERY,
-    "AT_PICKUP_POINT": ParcelStatus.AT_PICKUP_POINT,
-    "DELIVERED": ParcelStatus.DELIVERED,
-    "RETURN_TO_SENDER": ParcelStatus.RETURNING, "EXCEPTION": ParcelStatus.PROBLEM,
-}
-
 # Keys already warned about, so each unconfirmed shape is logged only once
 # per HA session instead of on every poll.
 _warned: set[str] = set()
@@ -154,7 +146,9 @@ def _status_map(product: str | None) -> dict[str, ParcelStatus]:
         return _COLISSIMO_MAP
     if product == "chronopost":
         return _CHRONOPOST_MAP
-    return _LEGACY_MAP
+    # An unknown product has no vocabulary of its own: every code falls through
+    # to the one-shot unmapped warning rather than a guessed meaning.
+    return {}
 
 
 def map_parcel_status(code: str | None, product: str | None = None) -> ParcelStatus:
@@ -311,33 +305,6 @@ def normalize_parcel(raw: dict, *, include_history: bool = False) -> dict:
     ``raw`` is the ``shipment`` object with ``inputIdShip`` injected by the API
     client, so Chronopost's canonical id cannot replace the registered barcode.
     """
-    if "trackingNumber" in raw and "product" not in raw:
-        # Compatibility with the generic template fixture; live La Poste data
-        # always follows the branch below.
-        status = map_parcel_status(raw.get("statusCode"))
-        delivered = status is ParcelStatus.DELIVERED
-        eta = raw.get("estimatedDelivery") or {}
-        point = raw.get("pickupPoint") or {}
-        dimensions = raw.get("dimensionsCm") or {}
-        planned_from = to_iso_timestamp(eta.get("from"))
-        planned_to = to_iso_timestamp(eta.get("to"))
-        if planned_from and planned_from == planned_to:
-            planned_to = None
-        return {
-            "carrier": "La Poste", "barcode": raw.get("trackingNumber"),
-            "sender": raw.get("sender") or None, "receiver": raw.get("recipient") or None,
-            "status": status, "raw_status": raw.get("statusText") or raw.get("statusCode"),
-            "delivered": delivered,
-            "delivered_at": to_iso_timestamp(raw.get("deliveredAt")) if delivered else None,
-            "planned_from": None if delivered else planned_from,
-            "planned_to": None if delivered else planned_to,
-            "pickup": status is ParcelStatus.AT_PICKUP_POINT,
-            "pickup_point": point.get("name") or None, "url": tracking_url(raw.get("trackingNumber")),
-            "weight": raw.get("weightKg"),
-            "dimensions": format_dimensions(dimensions.get("length"), dimensions.get("width"), dimensions.get("height")),
-            "history": build_history(raw.get("events")) if include_history else None, "raw": raw,
-        }
-
     product = str(raw.get("product") or "").lower()
     events = [event for event in raw.get("event") or [] if isinstance(event, dict)]
     newest = _newest_event(events)

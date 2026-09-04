@@ -253,13 +253,13 @@ class LaPosteCoordinator(DataUpdateCoordinator[list[dict]]):
                 # Unknown code, or not scanned yet. Keep prior data if we have
                 # it, otherwise show a pending placeholder so the user still
                 # sees the parcel they asked us to track.
-                raws.append(self._raw_cache.get(code) or {"trackingNumber": code})
+                raws.append(self._raw_cache.get(code) or {"inputIdShip": code})
                 continue
 
             # The response's own tracking number can be missing on edge
             # payloads; fall back to the code we asked for so the sensor keeps
             # its key.
-            result.setdefault("trackingNumber", code)
+            result.setdefault("inputIdShip", code)
             self._raw_cache[code] = result
             raws.append(result)
 
