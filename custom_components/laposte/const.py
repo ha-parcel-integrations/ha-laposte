@@ -72,8 +72,7 @@ CAPABILITIES = frozenset({"url", "history"})
 # ``url`` field. Document what you know about the endpoint right here — auth,
 # rate limits, response content type, and how an unknown tracking code is
 # signalled. The next person to touch this file has no other source in this
-# repo — the full write-up lives in this carrier's own directory under the
-# private ``carrier-research/api/``.
+# repo.
 TRACKING_API_URL = (
     "https://www.laposte.fr/ssu/sun/back/suivi-unifie/{tracking_code}?lang=fr"
 )
