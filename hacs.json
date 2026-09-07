@@ -1,6 +1,9 @@
 {
   "name": "La Poste",
   "content_in_root": false,
+  "zip_release": true,
+  "filename": "laposte.zip",
+  "hide_default_branch": true,
   "render_readme": true,
   "homeassistant": "2024.12.0"
 }
