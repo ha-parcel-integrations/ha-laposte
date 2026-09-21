@@ -52,6 +52,11 @@ _COLISSIMO_MAP: dict[str, ParcelStatus] = {
     "ACHIECA": ParcelStatus.PROBLEM, "AARAREF": ParcelStatus.PROBLEM,
     "AARABECH": ParcelStatus.PROBLEM, "DISIECHEC": ParcelStatus.PROBLEM,
     "DESLIVD": ParcelStatus.DELIVERED, "DESOBS": ParcelStatus.DELIVERED,
+    # Confirmed live: collected from a relay/locker and return ready for the
+    # sender respectively; DISINS means ready to be collected.
+    "DESLIVHD": ParcelStatus.DELIVERED,
+    "DESMDREXP": ParcelStatus.RETURNING,
+    "DISINS": ParcelStatus.AT_PICKUP_POINT,
 }
 _CHRONOPOST_MAP: dict[str, ParcelStatus] = {
     "PC1": ParcelStatus.IN_TRANSIT, "ET1": ParcelStatus.IN_TRANSIT,
