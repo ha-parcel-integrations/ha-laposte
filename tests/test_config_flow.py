@@ -1,4 +1,5 @@
 """Tests for the La Poste config and options flow."""
+
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.laposte.config_flow import (
@@ -89,9 +90,7 @@ async def test_options_add_parcel(hass):
         result["flow_id"], _parcel_input("example123456")
     )
     assert result["type"] == "create_entry"
-    assert result["data"][CONF_PARCELS] == [
-        {CONF_TRACKING_CODE: "EXAMPLE123456"}
-    ]
+    assert result["data"][CONF_PARCELS] == [{CONF_TRACKING_CODE: "EXAMPLE123456"}]
 
 
 async def test_options_add_code_with_separators(hass):
@@ -103,9 +102,7 @@ async def test_options_add_code_with_separators(hass):
         result["flow_id"], _parcel_input("example-123 456")
     )
     assert result["type"] == "create_entry"
-    assert result["data"][CONF_PARCELS] == [
-        {CONF_TRACKING_CODE: "EXAMPLE123456"}
-    ]
+    assert result["data"][CONF_PARCELS] == [{CONF_TRACKING_CODE: "EXAMPLE123456"}]
 
 
 async def test_options_accepts_code_of_unrecognized_shape(hass):
@@ -132,10 +129,12 @@ async def test_options_de_duplicates_tracking_codes(hass):
 
 
 async def test_options_remove_parcel(hass):
-    entry = _hub([
-        {CONF_TRACKING_CODE: "EXAMPLE111111"},
-        {CONF_TRACKING_CODE: "EXAMPLE222222"},
-    ])
+    entry = _hub(
+        [
+            {CONF_TRACKING_CODE: "EXAMPLE111111"},
+            {CONF_TRACKING_CODE: "EXAMPLE222222"},
+        ]
+    )
     entry.add_to_hass(hass)
     result = await _open_options_step(hass, entry, "parcels")
     result = await hass.config_entries.options.async_configure(
@@ -180,7 +179,9 @@ async def test_options_changes_interval_history_and_delivered(hass):
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         _settings_input(
-            history=True, filter_type="parcels", amount=5,
+            history=True,
+            filter_type="parcels",
+            amount=5,
         ),
     )
     assert result["type"] == "create_entry"

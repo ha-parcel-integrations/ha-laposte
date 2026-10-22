@@ -4,6 +4,7 @@ Product-specific regression payloads live in ``test_parcels.py``; these mirror
 a live Chronopost shipment — the product whose vocabulary covers the whole
 lifecycle the shared tests need — without containing real codes or PII.
 """
+
 from __future__ import annotations
 
 ACTIVE_CODE = "EXAMPLE999999"

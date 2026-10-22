@@ -9,10 +9,11 @@ trivially unit-testable without spinning up HA.
 La Poste uses distinct Colissimo and Chronopost vocabularies, selected from
 ``shipment.product``. The rest is suite-wide machinery.
 """
+
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 import logging
-from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -42,16 +43,25 @@ NEW_ISSUE_URL = (
 
 _COLISSIMO_MAP: dict[str, ParcelStatus] = {
     "EXPANN": ParcelStatus.REGISTERED,
-    "EDRDEP": ParcelStatus.IN_TRANSIT, "EDRINT": ParcelStatus.IN_TRANSIT,
-    "ACHNAT": ParcelStatus.IN_TRANSIT, "ACHORI": ParcelStatus.IN_TRANSIT,
-    "ACHERI": ParcelStatus.IN_TRANSIT, "ACHDOU": ParcelStatus.IN_TRANSIT,
-    "DISINTAS": ParcelStatus.IN_TRANSIT, "DISARR": ParcelStatus.IN_TRANSIT,
-    "DISTOU": ParcelStatus.IN_TRANSIT, "DISIRST": ParcelStatus.IN_TRANSIT,
-    "AARIDOU": ParcelStatus.IN_TRANSIT, "AARENDDOU": ParcelStatus.IN_TRANSIT,
+    "EDRDEP": ParcelStatus.IN_TRANSIT,
+    "EDRINT": ParcelStatus.IN_TRANSIT,
+    "ACHNAT": ParcelStatus.IN_TRANSIT,
+    "ACHORI": ParcelStatus.IN_TRANSIT,
+    "ACHERI": ParcelStatus.IN_TRANSIT,
+    "ACHDOU": ParcelStatus.IN_TRANSIT,
+    "DISINTAS": ParcelStatus.IN_TRANSIT,
+    "DISARR": ParcelStatus.IN_TRANSIT,
+    "DISTOU": ParcelStatus.IN_TRANSIT,
+    "DISIRST": ParcelStatus.IN_TRANSIT,
+    "AARIDOU": ParcelStatus.IN_TRANSIT,
+    "AARENDDOU": ParcelStatus.IN_TRANSIT,
     "AARIREF": ParcelStatus.IN_TRANSIT,
-    "ACHIECA": ParcelStatus.PROBLEM, "AARAREF": ParcelStatus.PROBLEM,
-    "AARABECH": ParcelStatus.PROBLEM, "DISIECHEC": ParcelStatus.PROBLEM,
-    "DESLIVD": ParcelStatus.DELIVERED, "DESOBS": ParcelStatus.DELIVERED,
+    "ACHIECA": ParcelStatus.PROBLEM,
+    "AARAREF": ParcelStatus.PROBLEM,
+    "AARABECH": ParcelStatus.PROBLEM,
+    "DISIECHEC": ParcelStatus.PROBLEM,
+    "DESLIVD": ParcelStatus.DELIVERED,
+    "DESOBS": ParcelStatus.DELIVERED,
     # Confirmed live: collected from a relay/locker and return ready for the
     # sender respectively; DISINS means ready to be collected.
     "DESLIVHD": ParcelStatus.DELIVERED,
@@ -59,10 +69,14 @@ _COLISSIMO_MAP: dict[str, ParcelStatus] = {
     "DISINS": ParcelStatus.AT_PICKUP_POINT,
 }
 _CHRONOPOST_MAP: dict[str, ParcelStatus] = {
-    "PC1": ParcelStatus.IN_TRANSIT, "ET1": ParcelStatus.IN_TRANSIT,
-    "EP1": ParcelStatus.IN_TRANSIT, "MD2": ParcelStatus.IN_TRANSIT,
-    "DR1": ParcelStatus.IN_TRANSIT, "MD1": ParcelStatus.OUT_FOR_DELIVERY,
-    "AG1": ParcelStatus.AT_PICKUP_POINT, "RE1": ParcelStatus.RETURNING,
+    "PC1": ParcelStatus.IN_TRANSIT,
+    "ET1": ParcelStatus.IN_TRANSIT,
+    "EP1": ParcelStatus.IN_TRANSIT,
+    "MD2": ParcelStatus.IN_TRANSIT,
+    "DR1": ParcelStatus.IN_TRANSIT,
+    "MD1": ParcelStatus.OUT_FOR_DELIVERY,
+    "AG1": ParcelStatus.AT_PICKUP_POINT,
+    "RE1": ParcelStatus.RETURNING,
     "DI1": ParcelStatus.DELIVERED,
 }
 # Keys already warned about, so each unconfirmed shape is logged only once
@@ -171,7 +185,9 @@ def map_parcel_status(code: str | None, product: str | None = None) -> ParcelSta
     return ParcelStatus.UNKNOWN
 
 
-def map_event_status(code: str | None, product: str | None = None) -> ParcelStatus | None:
+def map_event_status(
+    code: str | None, product: str | None = None
+) -> ParcelStatus | None:
     """Map a history entry's status code to a canonical status, or ``None``.
 
     Unmapped codes keep ``status: null`` on the history entry (rather than
@@ -196,11 +212,11 @@ def parse_iso(value: str | None) -> datetime | None:
     if not value:
         return None
     try:
-        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(str(value))
     except ValueError:
         return None
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
+        parsed = parsed.replace(tzinfo=UTC)
     return parsed
 
 
@@ -216,7 +232,7 @@ def to_iso_timestamp(value: Any) -> str | None:
         return None
     if isinstance(value, (int, float)):
         try:
-            return datetime.fromtimestamp(value / 1000, tz=timezone.utc).isoformat()
+            return datetime.fromtimestamp(value / 1000, tz=UTC).isoformat()
         except (OverflowError, OSError, ValueError):
             return None
     return str(value)
@@ -243,7 +259,10 @@ def format_dimensions(
 
 
 def build_history(
-    events: list | None, *, product: str | None = None, max_events: int = HISTORY_MAX_EVENTS
+    events: list | None,
+    *,
+    product: str | None = None,
+    max_events: int = HISTORY_MAX_EVENTS,
 ) -> list[dict]:
     """Build the canonical ``history`` list from the carrier's event list.
 
@@ -298,8 +317,9 @@ def _newest_event(events: list[dict]) -> dict:
     """Events arrive newest-first; retain wire order when dates tie."""
     return max(
         events,
-        key=lambda event: parse_iso(event.get("date"))
-        or datetime.min.replace(tzinfo=timezone.utc),
+        key=lambda event: (
+            parse_iso(event.get("date")) or datetime.min.replace(tzinfo=UTC)
+        ),
         default={},
     )
 
@@ -349,9 +369,13 @@ def normalize_parcel(raw: dict, *, include_history: bool = False) -> dict:
         "sender": merchant_name or None,
         "receiver": None,
         "status": status,
-        "raw_status": current_state.get("shortLabel") or newest.get("label") or status_code,
+        "raw_status": current_state.get("shortLabel")
+        or newest.get("label")
+        or status_code,
         "delivered": delivered,
-        "delivered_at": to_iso_timestamp(raw.get("deliveryDate")) if delivered else None,
+        "delivered_at": to_iso_timestamp(raw.get("deliveryDate"))
+        if delivered
+        else None,
         "planned_from": None,
         "planned_to": None,
         "pickup": status is ParcelStatus.AT_PICKUP_POINT,
@@ -395,14 +419,12 @@ def apply_delivered_filter(parcels: list[dict], entry: ConfigEntry) -> list[dict
     shows.
     """
     options = entry.options
-    filter_type = options.get(
-        CONF_DELIVERED_FILTER_TYPE, DEFAULT_DELIVERED_FILTER_TYPE
-    )
+    filter_type = options.get(CONF_DELIVERED_FILTER_TYPE, DEFAULT_DELIVERED_FILTER_TYPE)
     amount = int(
         options.get(CONF_DELIVERED_FILTER_AMOUNT, DEFAULT_DELIVERED_FILTER_AMOUNT)
     )
     if filter_type == "days":
-        cutoff = datetime.now(timezone.utc) - timedelta(days=amount)
+        cutoff = datetime.now(UTC) - timedelta(days=amount)
         return [
             parcel
             for parcel in parcels

@@ -4,7 +4,8 @@ These need no Home Assistant instance — the whole point of keeping
 ``parcels.py`` free of I/O is that the carrier-specific mapping (the part you
 rewrite per carrier) can be tested as plain functions.
 """
-from datetime import datetime, timedelta, timezone
+
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -37,7 +38,7 @@ from .payloads import active_sample, delivered_sample, event, pickup_sample
 
 
 @pytest.mark.parametrize(
-    "code,product,expected",
+    ("code", "product", "expected"),
     [
         ("EXPANN", "colissimo", ParcelStatus.REGISTERED),
         ("ACHNAT", "colissimo", ParcelStatus.IN_TRANSIT),
@@ -95,7 +96,7 @@ def test_unmapped_status_warns_only_once(caplog):
 def test_parse_iso_handles_z_naive_and_garbage():
     assert parse_iso("2026-04-29T13:12:42Z").tzinfo is not None
     # A naive value is assumed UTC so mixed lists still sort.
-    assert parse_iso("2026-04-29T13:12:42").tzinfo == timezone.utc
+    assert parse_iso("2026-04-29T13:12:42").tzinfo == UTC
     assert parse_iso("not-a-date") is None
     assert parse_iso(None) is None
 
@@ -132,8 +133,7 @@ def test_build_history_orders_oldest_to_newest():
 
 def test_build_history_caps_to_max_events():
     events = [
-        event("ET1", f"2026-04-{day:02d}T10:00:00Z", "moved")
-        for day in range(1, 26)
+        event("ET1", f"2026-04-{day:02d}T10:00:00Z", "moved") for day in range(1, 26)
     ]
     assert len(build_history(events, max_events=20)) == 20
 
@@ -233,7 +233,10 @@ def test_normalize_delivered_parcel():
     # arrived.
     assert parcel["planned_from"] is None
     assert parcel["planned_to"] is None
-    assert parcel["url"] == "https://www.laposte.fr/outils/suivre-vos-envois?code=EXAMPLE123456"
+    assert (
+        parcel["url"]
+        == "https://www.laposte.fr/outils/suivre-vos-envois?code=EXAMPLE123456"
+    )
     assert parcel["weight"] is None
     assert parcel["dimensions"] is None
     assert parcel["history"] is None  # opt-in, default off
@@ -294,11 +297,22 @@ def test_normalize_falls_back_to_status_code_without_text():
 
 def test_colissimo_uses_current_state_not_newest_event():
     raw = {
-        "inputIdShip": "EW000000000FR", "product": "colissimo",
+        "inputIdShip": "EW000000000FR",
+        "product": "colissimo",
         "currentState": {"code": "DISIECHEC", "shortLabel": "Échec"},
         "event": [
-            {"date": "2026-08-06T10:00:00+02:00", "group": "ACHNAT", "code": "ET1", "label": "Transit"},
-            {"date": "2026-04-20T10:00:00+02:00", "group": "DISIECHEC", "code": "MD3", "label": "Échec"},
+            {
+                "date": "2026-08-06T10:00:00+02:00",
+                "group": "ACHNAT",
+                "code": "ET1",
+                "label": "Transit",
+            },
+            {
+                "date": "2026-04-20T10:00:00+02:00",
+                "group": "DISIECHEC",
+                "code": "MD3",
+                "label": "Échec",
+            },
         ],
     }
     parcel = normalize_parcel(raw, include_history=True)
@@ -309,10 +323,16 @@ def test_colissimo_uses_current_state_not_newest_event():
 
 def test_colissimo_empty_current_state_code_warns_once(caplog):
     raw = {
-        "inputIdShip": "EW000000000FR", "product": "colissimo",
+        "inputIdShip": "EW000000000FR",
+        "product": "colissimo",
         "currentState": {"code": ""},
         "event": [
-            {"date": "2026-08-06T10:00:00+02:00", "group": "ACHNAT", "code": "ET1", "label": "Transit"},
+            {
+                "date": "2026-08-06T10:00:00+02:00",
+                "group": "ACHNAT",
+                "code": "ET1",
+                "label": "Transit",
+            },
         ],
     }
     parcel = normalize_parcel(raw)
@@ -323,9 +343,13 @@ def test_colissimo_empty_current_state_code_warns_once(caplog):
 
 def test_is_final_not_delivered_warns_once(caplog):
     raw = {
-        "inputIdShip": "EW000000000FR", "product": "colissimo", "isFinal": True,
+        "inputIdShip": "EW000000000FR",
+        "product": "colissimo",
+        "isFinal": True,
         "currentState": {"code": "ACHNAT"},
-        "event": [{"date": "2026-08-06T10:00:00+02:00", "group": "ACHNAT", "code": "ET1"}],
+        "event": [
+            {"date": "2026-08-06T10:00:00+02:00", "group": "ACHNAT", "code": "ET1"}
+        ],
     }
     normalize_parcel(raw)
     normalize_parcel(raw)
@@ -334,9 +358,13 @@ def test_is_final_not_delivered_warns_once(caplog):
 
 def test_is_final_delivered_does_not_warn(caplog):
     raw = {
-        "inputIdShip": "EW000000000FR", "product": "colissimo", "isFinal": True,
+        "inputIdShip": "EW000000000FR",
+        "product": "colissimo",
+        "isFinal": True,
         "currentState": {"code": "DESLIVD"},
-        "event": [{"date": "2026-08-06T10:00:00+02:00", "group": "DESLIVD", "code": "DI1"}],
+        "event": [
+            {"date": "2026-08-06T10:00:00+02:00", "group": "DESLIVD", "code": "DI1"}
+        ],
     }
     normalize_parcel(raw)
     assert "isFinal without a delivered status" not in caplog.text
@@ -346,13 +374,21 @@ def test_unexpected_estim_date_warns_once_across_shapes(caplog):
     """Both Chronopost-any and Colissimo-not-final trigger the same one-shot
     warning; it fires only for the first shape seen in a session."""
     chronopost_raw = {
-        "inputIdShip": "13199341485349", "product": "chronopost", "estimDate": "2026-08-10T10:00:00Z",
-        "currentState": {}, "event": [{"date": "2026-08-06T10:00:00+02:00", "code": "PC1"}],
+        "inputIdShip": "13199341485349",
+        "product": "chronopost",
+        "estimDate": "2026-08-10T10:00:00Z",
+        "currentState": {},
+        "event": [{"date": "2026-08-06T10:00:00+02:00", "code": "PC1"}],
     }
     colissimo_raw = {
-        "inputIdShip": "EW000000000FR", "product": "colissimo", "estimDate": "2026-08-10T10:00:00Z",
-        "isFinal": False, "currentState": {"code": "ACHNAT"},
-        "event": [{"date": "2026-08-06T10:00:00+02:00", "group": "ACHNAT", "code": "ET1"}],
+        "inputIdShip": "EW000000000FR",
+        "product": "colissimo",
+        "estimDate": "2026-08-10T10:00:00Z",
+        "isFinal": False,
+        "currentState": {"code": "ACHNAT"},
+        "event": [
+            {"date": "2026-08-06T10:00:00+02:00", "group": "ACHNAT", "code": "ET1"}
+        ],
     }
     normalize_parcel(chronopost_raw)
     normalize_parcel(chronopost_raw)
@@ -362,9 +398,14 @@ def test_unexpected_estim_date_warns_once_across_shapes(caplog):
 
 def test_estim_date_on_delivered_colissimo_does_not_warn(caplog):
     raw = {
-        "inputIdShip": "EW000000000FR", "product": "colissimo", "estimDate": "2026-08-10T10:00:00Z",
-        "isFinal": True, "currentState": {"code": "DESLIVD"},
-        "event": [{"date": "2026-08-06T10:00:00+02:00", "group": "DESLIVD", "code": "DI1"}],
+        "inputIdShip": "EW000000000FR",
+        "product": "colissimo",
+        "estimDate": "2026-08-10T10:00:00Z",
+        "isFinal": True,
+        "currentState": {"code": "DESLIVD"},
+        "event": [
+            {"date": "2026-08-06T10:00:00+02:00", "group": "DESLIVD", "code": "DI1"}
+        ],
     }
     normalize_parcel(raw)
     assert "estimDate outside the confirmed case" not in caplog.text
@@ -372,9 +413,13 @@ def test_estim_date_on_delivered_colissimo_does_not_warn(caplog):
 
 def test_is_parcel_back_warns_once(caplog):
     raw = {
-        "inputIdShip": "EW000000000FR", "product": "colissimo",
-        "currentState": {"code": "ACHNAT"}, "contextData": {"isParcelBack": True},
-        "event": [{"date": "2026-08-06T10:00:00+02:00", "group": "ACHNAT", "code": "ET1"}],
+        "inputIdShip": "EW000000000FR",
+        "product": "colissimo",
+        "currentState": {"code": "ACHNAT"},
+        "contextData": {"isParcelBack": True},
+        "event": [
+            {"date": "2026-08-06T10:00:00+02:00", "group": "ACHNAT", "code": "ET1"}
+        ],
     }
     normalize_parcel(raw)
     normalize_parcel(raw)
@@ -383,23 +428,35 @@ def test_is_parcel_back_warns_once(caplog):
 
 def test_merchant_name_populates_sender_without_warning(caplog):
     raw = {
-        "inputIdShip": "EW000000000FR", "product": "colissimo",
-        "currentState": {"code": "ACHNAT"}, "contextData": {"merchantName": "A Real Shop"},
-        "event": [{"date": "2026-08-06T10:00:00+02:00", "group": "ACHNAT", "code": "ET1"}],
+        "inputIdShip": "EW000000000FR",
+        "product": "colissimo",
+        "currentState": {"code": "ACHNAT"},
+        "contextData": {"merchantName": "A Real Shop"},
+        "event": [
+            {"date": "2026-08-06T10:00:00+02:00", "group": "ACHNAT", "code": "ET1"}
+        ],
     }
     parcel = normalize_parcel(raw)
     assert parcel["sender"] == "A Real Shop"
-    assert "merchantName" not in caplog.text  # confirmed live, no longer a one-shot warning
+    assert (
+        "merchantName" not in caplog.text
+    )  # confirmed live, no longer a one-shot warning
 
 
 def test_chronopost_return_is_sticky_and_barcode_keeps_input_code():
     raw = {
-        "inputIdShip": "13199341485349", "trackingNumber": "13199341485349",
+        "inputIdShip": "13199341485349",
+        "trackingNumber": "13199341485349",
         "idShip": "13199341485349X",
-        "product": "chronopost", "currentState": {"shortLabel": "Retour"},
+        "product": "chronopost",
+        "currentState": {"shortLabel": "Retour"},
         "event": [
             {"date": "2026-08-06T10:00:00+02:00", "code": "ET1", "label": "Transit"},
-            {"date": "2026-08-05T10:00:00+02:00", "code": "RE1", "label": "Retour expéditeur"},
+            {
+                "date": "2026-08-05T10:00:00+02:00",
+                "code": "RE1",
+                "label": "Retour expéditeur",
+            },
         ],
     }
     parcel = normalize_parcel(raw)
@@ -453,7 +510,7 @@ def _entry(filter_type: str, amount: int) -> MockConfigEntry:
 
 
 def _delivered_pair() -> list[dict]:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return [
         {"barcode": "RECENT", "delivered_at": (now - timedelta(days=1)).isoformat()},
         {"barcode": "OLD", "delivered_at": (now - timedelta(days=30)).isoformat()},

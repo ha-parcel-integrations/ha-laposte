@@ -1,14 +1,12 @@
 """Tests for the La Poste API client."""
+
 import json
 from unittest.mock import AsyncMock, MagicMock
 
 import aiohttp
 import pytest
 
-from custom_components.laposte.api import (
-    LaPosteApiClient,
-    LaPosteApiError,
-)
+from custom_components.laposte.api import LaPosteApiClient, LaPosteApiError
 
 CODE = "EW175528686FR"
 
@@ -40,14 +38,14 @@ async def test_get_parcel_returns_parcel_on_success():
     assert parcel["inputIdShip"] == CODE
     # the tracking code ends up in the URL
     assert CODE in session.get.call_args[0][0]
-    assert session.get.call_args.kwargs["headers"]["User-Agent"] == "PostmanRuntime/7.49.1"
+    assert (
+        session.get.call_args.kwargs["headers"]["User-Agent"] == "PostmanRuntime/7.49.1"
+    )
 
 
 async def test_get_parcel_returns_none_when_not_found(caplog):
     """An unknown or not-yet-scanned code is a normal state, not an error."""
-    client = LaPosteApiClient(
-        _session_returning(200, [])
-    )
+    client = LaPosteApiClient(_session_returning(200, []))
     for _ in range(2):
         assert await client.async_get_parcel("EXAMPLE000000") is None
     assert caplog.text.count("empty JSON array") == 1
