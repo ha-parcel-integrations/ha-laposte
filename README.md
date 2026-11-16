@@ -96,8 +96,8 @@ what your tracked parcels are actually doing:
   AM), so an overnight update is never missed.
 - **Hot (every 15 minutes)** — while any tracked parcel is out for delivery
   today, starting an hour before its delivery window opens (or immediately if
-  no window is known yet — this is the fallback that fires in practice for
-  La Poste, whose tracking payload exposes no ETA).
+  no window is known yet — La Poste gives a window for Colissimo parcels
+  only, and not always).
 - **Normal (every 45 minutes)** — for anything else still on its way.
 - **Fully paused** — once every tracked parcel has been delivered, or nothing
   is tracked at all, polling stops until you add a parcel back (adding one

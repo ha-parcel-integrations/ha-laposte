@@ -45,7 +45,12 @@ This repo follows it exactly.
   normal identity.
 - **Two payload vocabularies:** Colissimo maps `currentState.code`; Chronopost
   maps event codes, with a sticky `RE1` return unless `DI1` follows it.
-- **Intentional `None` fields:** no ETA, receiver, weight, dimensions or
+- **Delivery window (Colissimo):** `planned_from`/`planned_to` come from
+  `estimHourMin`/`estimHourMax`, moved to the day `estimDate` names — live,
+  the hours can carry the lookup day while `estimDate` (always 01:00) holds
+  the delivery day. `estimDate` alone is never a window, and a delivered
+  parcel has none. An `estimDate` on Chronopost still warns once.
+- **Intentional `None` fields:** no receiver, weight, dimensions or
   pickup-point details are exposed. `sender` comes from `merchantName` and is
   redacted in diagnostics.
 - **Privacy:** redact tracking IDs, URLs, `contextData.partner` and sender data.
