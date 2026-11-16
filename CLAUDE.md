@@ -46,7 +46,8 @@ This repo follows it exactly.
 - **Two payload vocabularies:** Colissimo maps `currentState.code`; Chronopost
   maps event codes, with a sticky `RE1` return unless `DI1` follows it.
 - **Delivery window (Colissimo):** `planned_from`/`planned_to` come from
-  `estimHourMin`/`estimHourMax`, moved to the day `estimDate` names — live,
+  `estimHourMin`/`estimHourMax`, moved to the day and UTC offset `estimDate`
+  names (the offset matters across a clock change) — live,
   the hours can carry the lookup day while `estimDate` (always 01:00) holds
   the delivery day. `estimDate` alone is never a window, and a delivered
   parcel has none. An `estimDate` on Chronopost still warns once.

@@ -250,7 +250,11 @@ def estimated_slot_bound(hour: Any, estim_date: Any) -> str | None:
     if bound is None:
         return None
     if day is not None:
-        bound = bound.replace(year=day.year, month=day.month, day=day.day)
+        # The lookup day's offset is wrong when a clock change falls between
+        # the lookup and the delivery day.
+        bound = bound.replace(
+            year=day.year, month=day.month, day=day.day, tzinfo=day.tzinfo
+        )
     return bound.isoformat()
 
 

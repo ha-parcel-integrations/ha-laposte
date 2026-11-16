@@ -296,6 +296,17 @@ def test_colissimo_window_already_on_the_estim_date_day_is_unchanged():
     assert parcel["planned_to"] == "2026-08-07T12:00:00+02:00"
 
 
+def test_colissimo_window_takes_the_estim_date_offset_across_a_clock_change():
+    """A lookup in summer time for a delivery in winter time keeps 08:00 local."""
+    raw = colissimo_window_sample()
+    raw["estimDate"] = "2026-10-26T01:00:00+01:00"
+    raw["estimHourMin"] = "2026-10-24T08:00:00+02:00"
+    raw["estimHourMax"] = "2026-10-24T12:00:00+02:00"
+    parcel = normalize_parcel(raw)
+    assert parcel["planned_from"] == "2026-10-26T08:00:00+01:00"
+    assert parcel["planned_to"] == "2026-10-26T12:00:00+01:00"
+
+
 def test_colissimo_window_keeps_hours_without_estim_date():
     raw = colissimo_window_sample()
     del raw["estimDate"]
