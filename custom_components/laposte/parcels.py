@@ -120,11 +120,11 @@ def _warn_is_final_not_delivered(status_code: str | None, product: str) -> None:
 
 
 def _warn_unexpected_estim_date(product: str, is_final: bool) -> None:
-    """Warn once for an ``estimDate`` outside the only confirmed case.
+    """Warn once for an ``estimDate`` outside the confirmed Colissimo cases.
 
-    The only confirmed case is a delivered Colissimo parcel — a real ETA on
-    Chronopost, or on a still-moving Colissimo parcel, would unlock
-    ``planned_from``/``planned_to``.
+    Confirmed on Colissimo: a delivered parcel, and a still-moving one whose
+    ``estimHourMin``/``estimHourMax`` become ``planned_from``/``planned_to``.
+    A real ETA on Chronopost would unlock the same window there.
     """
     _warn_once(
         "unexpected-estim-date",
@@ -236,6 +236,22 @@ def to_iso_timestamp(value: Any) -> str | None:
         except (OverflowError, OSError, ValueError):
             return None
     return str(value)
+
+
+def estimated_slot_bound(hour: Any, estim_date: Any) -> str | None:
+    """Return a slot bound on the day ``estimDate`` names.
+
+    Seen live: ``estimHourMin``/``estimHourMax`` carry the right hours but can
+    carry the day of the lookup, while ``estimDate`` holds the delivery day
+    (at 01:00, so it is never a bound on its own).
+    """
+    bound = parse_iso(to_iso_timestamp(hour))
+    day = parse_iso(to_iso_timestamp(estim_date))
+    if bound is None:
+        return None
+    if day is not None:
+        bound = bound.replace(year=day.year, month=day.month, day=day.day)
+    return bound.isoformat()
 
 
 def format_dimensions(
@@ -355,7 +371,7 @@ def normalize_parcel(raw: dict, *, include_history: bool = False) -> dict:
     if is_final and not delivered:
         _warn_is_final_not_delivered(status_code, product)
     estim_date = raw.get("estimDate")
-    if estim_date and (product == "chronopost" or not is_final):
+    if estim_date and product == "chronopost":
         _warn_unexpected_estim_date(product, is_final)
     if context.get("isParcelBack"):
         _warn_is_parcel_back()
@@ -376,8 +392,12 @@ def normalize_parcel(raw: dict, *, include_history: bool = False) -> dict:
         "delivered_at": to_iso_timestamp(raw.get("deliveryDate"))
         if delivered
         else None,
-        "planned_from": None,
-        "planned_to": None,
+        "planned_from": None
+        if delivered
+        else estimated_slot_bound(raw.get("estimHourMin"), estim_date),
+        "planned_to": None
+        if delivered
+        else estimated_slot_bound(raw.get("estimHourMax"), estim_date),
         "pickup": status is ParcelStatus.AT_PICKUP_POINT,
         "pickup_point": None,
         "url": tracking_url(tracking_code),

@@ -205,7 +205,7 @@ def test_capabilities_match_what_normalize_parcel_actually_returns():
     stays correct for whatever subset of CAPABILITIES that carrier declares.
     """
     delivered = normalize_parcel(delivered_sample())
-    active = normalize_parcel(active_sample())
+    windowed = normalize_parcel(colissimo_window_sample())
     pickup = normalize_parcel(pickup_sample())
     with_history = normalize_parcel(delivered_sample(), include_history=True)
 
@@ -214,7 +214,9 @@ def test_capabilities_match_what_normalize_parcel_actually_returns():
     if "dimensions" in CAPABILITIES:
         assert delivered["dimensions"] is not None
     if "delivery_window" in CAPABILITIES:
-        assert active["planned_from"] is not None or active["planned_to"] is not None
+        assert (
+            windowed["planned_from"] is not None or windowed["planned_to"] is not None
+        )
     if "pickup_point" in CAPABILITIES:
         assert pickup["pickup_point"] is not None
     if "url" in CAPABILITIES:
@@ -252,11 +254,82 @@ def test_normalize_history_is_opt_in():
     assert parcel["history"][0]["status"] == ParcelStatus.IN_TRANSIT
 
 
-def test_normalize_active_parcel_exposes_no_window():
-    """La Poste publishes no usable ETA; the keys exist but stay empty."""
+def colissimo_window_sample() -> dict:
+    """A moving Colissimo parcel in the shape seen live: the slot hours carry
+    the lookup day, estimDate the delivery day at 01:00."""
+    return {
+        "inputIdShip": "EW000000000FR",
+        "product": "colissimo",
+        "isFinal": False,
+        "estimDate": "2026-08-07T01:00:00+02:00",
+        "estimHourMin": "2026-08-06T08:00:00+02:00",
+        "estimHourMax": "2026-08-06T12:00:00+02:00",
+        "currentState": {"code": "ACHNAT"},
+        "event": [
+            {"date": "2026-08-06T10:00:00+02:00", "group": "ACHNAT", "code": "ET1"}
+        ],
+    }
+
+
+def test_normalize_active_parcel_without_estimate_has_no_window():
     parcel = normalize_parcel(active_sample())
     assert parcel["status"] == ParcelStatus.OUT_FOR_DELIVERY
     assert parcel["delivered"] is False
+    assert parcel["planned_from"] is None
+    assert parcel["planned_to"] is None
+
+
+def test_colissimo_window_takes_the_estim_date_day(caplog):
+    """The slot hours keep their time but move to the day estimDate names."""
+    parcel = normalize_parcel(colissimo_window_sample())
+    assert parcel["planned_from"] == "2026-08-07T08:00:00+02:00"
+    assert parcel["planned_to"] == "2026-08-07T12:00:00+02:00"
+    assert "estimDate outside the confirmed case" not in caplog.text
+
+
+def test_colissimo_window_already_on_the_estim_date_day_is_unchanged():
+    raw = colissimo_window_sample()
+    raw["estimHourMin"] = "2026-08-07T08:00:00+02:00"
+    raw["estimHourMax"] = "2026-08-07T12:00:00+02:00"
+    parcel = normalize_parcel(raw)
+    assert parcel["planned_from"] == "2026-08-07T08:00:00+02:00"
+    assert parcel["planned_to"] == "2026-08-07T12:00:00+02:00"
+
+
+def test_colissimo_window_keeps_hours_without_estim_date():
+    raw = colissimo_window_sample()
+    del raw["estimDate"]
+    parcel = normalize_parcel(raw)
+    assert parcel["planned_from"] == "2026-08-06T08:00:00+02:00"
+    assert parcel["planned_to"] == "2026-08-06T12:00:00+02:00"
+
+
+def test_colissimo_estim_date_alone_is_no_window():
+    """estimDate sits at 01:00: it names a day, not a time to show."""
+    raw = colissimo_window_sample()
+    del raw["estimHourMin"], raw["estimHourMax"]
+    parcel = normalize_parcel(raw)
+    assert parcel["planned_from"] is None
+    assert parcel["planned_to"] is None
+
+
+def test_delivered_colissimo_has_no_window():
+    raw = colissimo_window_sample()
+    raw.update(
+        {
+            "isFinal": True,
+            "currentState": {"code": "DESLIVD"},
+            "event": [
+                {
+                    "date": "2026-08-07T10:00:00+02:00",
+                    "group": "DESLIVD",
+                    "code": "DI1",
+                }
+            ],
+        }
+    )
+    parcel = normalize_parcel(raw)
+    assert parcel["delivered"] is True
     assert parcel["planned_from"] is None
     assert parcel["planned_to"] is None
 
@@ -374,9 +447,9 @@ def test_is_final_delivered_does_not_warn(caplog):
     assert "isFinal without a delivered status" not in caplog.text
 
 
-def test_unexpected_estim_date_warns_once_across_shapes(caplog):
-    """Both Chronopost-any and Colissimo-not-final trigger the same one-shot
-    warning; it fires only for the first shape seen in a session."""
+def test_unexpected_estim_date_warns_once_on_chronopost(caplog):
+    """Chronopost triggers a one-shot warning; a moving Colissimo parcel's
+    estimDate is the confirmed delivery-window case and stays silent."""
     chronopost_raw = {
         "inputIdShip": "13199341485349",
         "product": "chronopost",
@@ -394,9 +467,10 @@ def test_unexpected_estim_date_warns_once_across_shapes(caplog):
             {"date": "2026-08-06T10:00:00+02:00", "group": "ACHNAT", "code": "ET1"}
         ],
     }
-    normalize_parcel(chronopost_raw)
-    normalize_parcel(chronopost_raw)
     normalize_parcel(colissimo_raw)
+    assert "estimDate outside the confirmed case" not in caplog.text
+    normalize_parcel(chronopost_raw)
+    normalize_parcel(chronopost_raw)
     assert caplog.text.count("estimDate outside the confirmed case") == 1
 
 
