@@ -44,7 +44,8 @@ This repo follows it exactly.
   edge accepts `User-Agent: PostmanRuntime/7.49.1` from aiohttp but rejects its
   normal identity.
 - **Two payload vocabularies:** Colissimo maps `currentState.code`; Chronopost
-  maps event codes, with a sticky `RE1` return unless `DI1` follows it.
+  and tracked international letters (`lettre et ppi import suivi`) map event
+  codes, with a sticky `RE1` return unless `DI1` follows it.
 - **Delivery window (Colissimo):** `planned_from`/`planned_to` come from
   `estimHourMin`/`estimHourMax`, moved to the day and UTC offset `estimDate`
   names (the offset matters across a clock change) — live,

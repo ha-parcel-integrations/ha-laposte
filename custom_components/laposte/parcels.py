@@ -79,6 +79,10 @@ _CHRONOPOST_MAP: dict[str, ParcelStatus] = {
     "RE1": ParcelStatus.RETURNING,
     "DI1": ParcelStatus.DELIVERED,
 }
+# Confirmed live: a tracked international letter ("lettre et PPI import
+# suivi") reports the same event codes as Chronopost — MD1 when it is out for
+# delivery, then DI1 with isFinal once it is in the letterbox.
+_EVENT_CODE_PRODUCTS = frozenset({"chronopost", "lettre et ppi import suivi"})
 # Keys already warned about, so each unconfirmed shape is logged only once
 # per HA session instead of on every poll.
 _warned: set[str] = set()
@@ -163,7 +167,7 @@ def _warn_is_parcel_back() -> None:
 def _status_map(product: str | None) -> dict[str, ParcelStatus]:
     if product == "colissimo":
         return _COLISSIMO_MAP
-    if product == "chronopost":
+    if product in _EVENT_CODE_PRODUCTS:
         return _CHRONOPOST_MAP
     # An unknown product has no vocabulary of its own: every code falls through
     # to the one-shot unmapped warning rather than a guessed meaning.
