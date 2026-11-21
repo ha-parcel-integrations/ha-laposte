@@ -52,6 +52,8 @@ from .payloads import active_sample, delivered_sample, event, pickup_sample
         ("AG1", "chronopost", ParcelStatus.AT_PICKUP_POINT),
         ("RE1", "chronopost", ParcelStatus.RETURNING),
         ("DI1", "chronopost", ParcelStatus.DELIVERED),
+        ("MD1", "lettre et ppi import suivi", ParcelStatus.OUT_FOR_DELIVERY),
+        ("DI1", "lettre et ppi import suivi", ParcelStatus.DELIVERED),
     ],
 )
 def test_map_parcel_status_known(code, product, expected):
@@ -246,6 +248,25 @@ def test_normalize_delivered_parcel():
     assert parcel["weight"] is None
     assert parcel["dimensions"] is None
     assert parcel["history"] is None  # opt-in, default off
+
+
+def test_normalize_delivered_tracked_letter(caplog):
+    """A tracked letter in the letterbox is delivered, not ``unknown``."""
+    raw = delivered_sample()
+    raw.update(
+        {
+            "product": "Lettre et PPI import suivi",
+            "currentState": {
+                "code": "DI1",
+                "shortLabel": "Votre envoi a été distribué dans votre boîte aux lettres.",
+            },
+        }
+    )
+    parcel = normalize_parcel(raw)
+    assert parcel["status"] == ParcelStatus.DELIVERED
+    assert parcel["delivered"] is True
+    assert parcel["carrier"] == "La Poste"
+    assert "issues/new" not in caplog.text
 
 
 def test_normalize_history_is_opt_in():

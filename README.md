@@ -10,7 +10,7 @@
 > 💬 Questions or feedback? Join the discussion on the [Home Assistant community](https://community.home-assistant.io/t/packages-postnl-dhl-nl-dpd-and-gls-parcel-integration/112433/).
 
 A custom Home Assistant integration for [La Poste](https://www.laposte.fr/),
-Colissimo and Chronopost parcels. No account or API key is needed: enter the
+Colissimo and Chronopost parcels, and tracked international letters. No account or API key is needed: enter the
 tracking code yourself, as on La Poste's consumer tracking page.
 
 ## Contents
