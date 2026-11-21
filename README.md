@@ -117,6 +117,7 @@ Standard HA removal applies: **Settings → Devices & Services → La Poste → 
 | `sensor.laposte_incoming_parcels` | Number of active tracked parcels, full list under the `parcels` attribute |
 | `sensor.laposte_parcel_<code>` | One per tracked parcel; state is the canonical status, attributes carry the full normalised parcel |
 | `sensor.laposte_next_delivery` | Earliest expected delivery moment across all active parcels |
+| `sensor.laposte_en_route_to_pickup_point` | Incoming parcels on their way to a pickup point that have not arrived yet |
 | `sensor.laposte_awaiting_pickup` | Incoming parcels that are ready to collect at a pickup point |
 | `sensor.laposte_delivered_parcels` | Recently delivered parcels (see the retention option) |
 | `calendar.laposte_deliveries` | Read-only calendar of expected deliveries, no extra API calls |

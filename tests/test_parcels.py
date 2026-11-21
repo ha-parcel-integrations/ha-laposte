@@ -16,6 +16,7 @@ from custom_components.laposte.const import (
     CONF_DELIVERED_FILTER_TYPE,
     DOMAIN,
     KNOWN_CAPABILITIES,
+    PENDING_CAPABILITIES,
     ParcelStatus,
 )
 from custom_components.laposte.parcels import (
@@ -193,6 +194,11 @@ CANONICAL_KEYS = [
 def test_normalize_publishes_exactly_the_canonical_keys():
     """The aggregator and cross-carrier dashboards depend on this key set."""
     assert list(normalize_parcel(delivered_sample())) == CANONICAL_KEYS
+
+
+def test_pending_capabilities_are_known_and_not_claimed():
+    assert PENDING_CAPABILITIES <= KNOWN_CAPABILITIES
+    assert not CAPABILITIES & PENDING_CAPABILITIES
 
 
 def test_capabilities_are_known_values():
@@ -387,6 +393,24 @@ def test_normalize_pickup_parcel():
     assert parcel["status"] == ParcelStatus.AT_PICKUP_POINT
     assert parcel["pickup"] is True
     assert parcel["pickup_point"] is None
+
+
+def test_normalize_collected_relay_parcel_keeps_pickup():
+    raw = {
+        "inputIdShip": "EXAMPLE000001",
+        "product": "colissimo",
+        "isFinal": True,
+        "currentState": {"code": "DESLIVHD", "shortLabel": "Collected"},
+        "event": [
+            {"group": "DESLIVHD", "date": "2026-04-29T13:12:42Z", "label": "Collected"},
+            {"group": "ACHNAT", "date": "2026-04-28T08:00:00Z", "label": "In transit"},
+        ],
+    }
+    parcel = normalize_parcel(raw)
+    assert parcel["status"] == ParcelStatus.DELIVERED
+    assert parcel["pickup"] is True
+    assert parcel["pickup_point"] is None
+    assert parcel["planned_from"] is None
 
 
 def test_normalize_pending_placeholder():

@@ -50,8 +50,22 @@ This repo follows it exactly.
   `estimHourMin`/`estimHourMax`, moved to the day and UTC offset `estimDate`
   names (the offset matters across a clock change) — live,
   the hours can carry the lookup day while `estimDate` (always 01:00) holds
-  the delivery day. `estimDate` alone is never a window, and a delivered
-  parcel has none. An `estimDate` on Chronopost still warns once.
+  the delivery day. The window is built with `planned_window` in
+  `Europe/Paris`: a lone `estimHourMin` runs to 23:59:59 that day, a lone
+  `estimHourMax` is no window. `estimDate` alone is never a window (contract
+  says a date is a whole-day window; here it is left out on purpose, as the
+  day-only value was seen on parcels that still moved). A parcel that is
+  delivered, returning or at a pickup point has none. An `estimDate` on
+  Chronopost still warns once.
+- **Pickup:** `pickup` is true once any event maps to `at_pickup_point`, or
+  the Colissimo code `DESLIVHD` (collected from a relay/locker) shows as
+  current state or event (sticky after collection). No pickup point name has
+  been seen in a real payload, so `pickup_point` stays `None` until one shows
+  a name (listed in `PENDING_CAPABILITIES`). Chronopost's `AG1` covers both "on its way to" and
+  "available at" the point, so `en_route_to_pickup_point` reads 0 until a
+  code that separates them shows up; both pickup sensors exist regardless.
+- **`delivered` is `status is DELIVERED` only.** `contextData.isParcelBack`
+  has never been seen true, so a return stays `returning` and active.
 - **Intentional `None` fields:** no receiver, weight, dimensions or
   pickup-point details are exposed. `sender` comes from `merchantName` and is
   redacted in diagnostics.
