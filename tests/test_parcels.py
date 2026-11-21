@@ -260,12 +260,28 @@ def test_normalize_delivered_tracked_letter(caplog):
                 "code": "DI1",
                 "shortLabel": "Votre envoi a été distribué dans votre boîte aux lettres.",
             },
+            "event": [
+                event(
+                    "DI1",
+                    "2026-11-19T11:02:00Z",
+                    "Votre envoi a été distribué dans votre boîte aux lettres.",
+                ),
+                event(
+                    "MD1",
+                    "2026-11-19T07:30:00Z",
+                    "Votre envoi est en cours de livraison.",
+                ),
+            ],
         }
     )
-    parcel = normalize_parcel(raw)
+    parcel = normalize_parcel(raw, include_history=True)
     assert parcel["status"] == ParcelStatus.DELIVERED
     assert parcel["delivered"] is True
     assert parcel["carrier"] == "La Poste"
+    assert [entry["status"] for entry in parcel["history"]] == [
+        ParcelStatus.OUT_FOR_DELIVERY,
+        ParcelStatus.DELIVERED,
+    ]
     assert "issues/new" not in caplog.text
 
 
